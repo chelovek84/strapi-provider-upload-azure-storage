@@ -57,8 +57,15 @@ function getServiceBaseUrl(config: Config) {
     );
 }
 
-function getFileName(path: string, file: StrapiFile) {
-    return `${trimParam(path)}/${file.hash}${file.ext}`;
+function isRootContainer(containerName: string) {
+    return trimParam(containerName).toLowerCase() === '$root';
+}
+
+function getFileName(containerName: string, path: string, file: StrapiFile) {
+  const name = `${file.hash}${file.ext}`;
+  if (isRootContainer(containerName) || trimParam(path) === '')
+    return name;
+  return `${trimParam(path)}/${file.hash}${file.ext}`;
 }
 
 function makeBlobServiceClient(config: Config) {
@@ -106,7 +113,7 @@ async function handleUpload(
 ): Promise<void> {
     const serviceBaseURL = getServiceBaseUrl(config);
     const containerClient = blobSvcClient.getContainerClient(trimParam(config.containerName));
-    const client = containerClient.getBlockBlobClient(getFileName(config.defaultPath, file));
+    const client = containerClient.getBlockBlobClient(getFileName(config.containerName, config.defaultPath, file));
 
     if (trimParam(config?.createContainerIfNotExist) === 'true') {
         if (
@@ -152,7 +159,7 @@ async function handleDelete(
     file: StrapiFile
 ): Promise<void> {
     const containerClient = blobSvcClient.getContainerClient(trimParam(config.containerName));
-    const client = containerClient.getBlobClient(getFileName(config.defaultPath, file));
+    const client = containerClient.getBlobClient(getFileName(config.containerName, config.defaultPath, file));
     await client.delete();
     file.url = client.url;
 }
