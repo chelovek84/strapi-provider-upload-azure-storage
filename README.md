@@ -95,7 +95,7 @@ module.exports = ({ env }) => ({
 | containerName             | true                                          | Container name                                                                                        |
 | createContainerIfNotExist | false                                         | Attempts to create the container if not existing. Must be one of 'true' or any string                 |
 | publicAccessType          | false (param for 'createContainerIfNotExist') | Sets the public access of a newly created container to one of 'blob' or 'container'                   |
-| defaultPath               | true                                          | The path to use when there is none being specified. Defaults to `assets`                              |
+| defaultPath               | true                                          | The path to use when there is none being specified. The value is ignored when containerName is `$root`. Defaults to `assets`                              |
 | cdnBaseURL                | false                                         | CDN base url                                                                                          |
 | defaultCacheControl       | false                                         | Cache-Control header value for all uploaded files                                                     |
 | removeCN                  | false                                         | Set to true, to remove container name from azure URL                                                  |
