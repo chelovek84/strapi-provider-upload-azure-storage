@@ -134,7 +134,12 @@ async function handleUpload(
     };
 
     const cdnBaseURL = trimParam(config.cdnBaseURL);
-    file.url = cdnBaseURL ? client.url.replace(serviceBaseURL, cdnBaseURL) : client.url;
+    
+    // remove SAS tokens before saving in DB
+    const cleanUrl = client.url.split('?')[0];
+
+    file.url = cdnBaseURL ? cleanUrl.replace(serviceBaseURL, cdnBaseURL) : cleanUrl;
+
     if (config.removeCN && config.removeCN === 'true') {
         const rawSegment = `/${config.containerName}/`;
         const encodedSegment = `/${encodeURIComponent(config.containerName)}/`;
@@ -224,6 +229,29 @@ module.exports = {
             delete(file: StrapiFile) {
                 return handleDelete(config, blobSvcClient, file);
             },
+            getSignedUrl(file: StrapiFile) {
+                // CDN mode: no SAS should be applied
+                if (trimParam(config.cdnBaseURL)) {
+                  return { url: file.url };
+                }
+              
+                // Only default auth can have SAS token
+                if (config.authType !== 'default') {
+                  return { url: file.url };
+                }
+              
+                const sas = trimParam(config.sasToken);
+                if (!sas) {
+                  return { url: file.url };
+                }
+              
+                // Build fresh SAS URL
+                const cleanUrl = file.url.split('?')[0];
+                return { url: `${cleanUrl}${sas}` };
+              },
+              isPrivate() {
+                return config.authType === 'default' && !!trimParam(config.sasToken);
+              },
         };
     },
 };
