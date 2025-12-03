@@ -30,6 +30,7 @@ type DefaultConfig = CommonConfig & {
     authType: 'default';
     accountKey: string;
     sasToken: string;
+    signToken: string;
 };
 
 type ManagedIdentityConfig = CommonConfig & {
@@ -244,10 +245,15 @@ module.exports = {
                 if (!sas) {
                   return { url: file.url };
                 }
+
+                const sign = trimParam(config.signToken);
+                if (!sign) {
+                  return { url: file.url };
+                }
               
                 // Build fresh SAS URL
                 const cleanUrl = file.url.split('?')[0];
-                return { url: `${cleanUrl}${sas}` };
+                return { url: `${cleanUrl}${sign}` };
               },
               isPrivate() {
                 return config.authType === 'default' && !!trimParam(config.sasToken);
