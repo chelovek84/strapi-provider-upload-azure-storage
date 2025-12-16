@@ -5,6 +5,9 @@ import {
     newPipeline,
     PublicAccessType,
     StorageSharedKeyCredential,
+    generateBlobSASQueryParameters,
+    BlobSASPermissions,
+    SASProtocol,
 } from '@azure/storage-blob';
 import internal from 'stream';
 
@@ -22,6 +25,7 @@ type CommonConfig = {
         bufferSize: number;
         maxBuffers: number;
     };
+    sasMinutes: number;
 };
 
 type Config = DefaultConfig | ManagedIdentityConfig;
@@ -30,7 +34,6 @@ type DefaultConfig = CommonConfig & {
     authType: 'default';
     accountKey: string;
     sasToken: string;
-    signToken: string;
 };
 
 type ManagedIdentityConfig = CommonConfig & {
@@ -230,34 +233,81 @@ module.exports = {
             delete(file: StrapiFile) {
                 return handleDelete(config, blobSvcClient, file);
             },
-            getSignedUrl(file: StrapiFile) {
-                // CDN mode: no SAS should be applied
+            async getSignedUrl(file: StrapiFile) {
+                // CDN mode → no SAS
                 if (trimParam(config.cdnBaseURL)) {
-                  return { url: file.url };
-                }
-              
-                // Only default auth can have SAS token
-                if (config.authType !== 'default') {
-                  return { url: file.url };
-                }
-              
-                const sas = trimParam(config.sasToken);
-                if (!sas) {
-                  return { url: file.url };
+                    return { url: file.url };
                 }
 
-                const sign = trimParam(config.signToken);
-                if (!sign) {
-                  return { url: file.url };
-                }
-              
-                // Build fresh SAS URL
                 const cleanUrl = file.url.split('?')[0];
-                return { url: `${cleanUrl}${sign}` };
-              },
-              isPrivate() {
+
+                const blobName = getFileName(
+                    config.containerName,
+                    config.defaultPath,
+                    file
+                );
+
+                const now = new Date();
+
+                const expiresOn = new Date(now.getTime() + config.sasMinutes * 60 * 1000);
+
+                try {
+                    // ===============================
+                    // MSI → User Delegation SAS
+                    // ===============================
+                    if (config.authType === 'msi') {
+                        const userDelegationKey =
+                            await blobSvcClient.getUserDelegationKey(now, expiresOn);
+
+                        const sas = generateBlobSASQueryParameters(
+                            {
+                            containerName: trimParam(config.containerName),
+                            blobName,
+                            permissions: BlobSASPermissions.parse('r'),
+                            startsOn: now,
+                            expiresOn,
+                            protocol: SASProtocol.Https,
+                            },
+                            userDelegationKey,
+                            trimParam(config.account)
+                        ).toString();
+
+                        return { url: `${cleanUrl}?${sas}` };
+                    }
+
+                    // ===============================
+                    // Default auth → Account SAS
+                    // ===============================
+                    if (config.authType === 'default') {
+                        const credential = new StorageSharedKeyCredential(
+                            trimParam(config.account),
+                            trimParam(config.accountKey)
+                        );
+
+                        const sas = generateBlobSASQueryParameters(
+                            {
+                            containerName: trimParam(config.containerName),
+                            blobName,
+                            permissions: BlobSASPermissions.parse('r'),
+                            startsOn: now,
+                            expiresOn,
+                            protocol: SASProtocol.Https,
+                            },
+                            credential
+                        ).toString();
+
+                        return { url: `${cleanUrl}?${sas}` };
+                    }
+                } catch (err) {
+                    console.log(err);
+                }
+
+                // Final fallback → unsigned URL
+                return { url: cleanUrl };
+            },
+            isPrivate() {
                 return config.authType === 'default' && !!trimParam(config.sasToken);
-              },
+            },
         };
     },
 };
